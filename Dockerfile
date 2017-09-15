@@ -6,7 +6,9 @@ ENV  GOPATH /go
 ENV APPPATH $GOPATH/src/github.com/docker-infra/container-exporter
 COPY . $APPPATH
 RUN apk add --update -t build-deps go git mercurial libc-dev gcc libgcc \
-    && cd $APPPATH && go get -d && go build -buildmode=c-archive -o /bin/container-exporter \
+    && cd $APPPATH && go get -d \
+    && rm -rf ../../docker/docker/vendor/github.com/opencontainers/runc/ \
+    && go build -o /bin/container-exporter \
     && apk del --purge build-deps && rm -rf $GOPATH
-
+RUN chmod a+x /bin/container-exporter
 ENTRYPOINT [ "/bin/container-exporter" ]
