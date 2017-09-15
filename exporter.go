@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/libcontainer/cgroups"
-	"github.com/docker/libcontainer/cgroups/fs"
+	"github.com/opencontainers/runc/libcontainer/cgroups"
+	"github.com/opencontainers/runc/libcontainer/cgroups/fs"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -230,7 +230,7 @@ func (e *Exporter) collect(ch chan<- prometheus.Metric) error {
 		e.errors.WithLabelValues("list").Inc()
 		return err
 	}
-	mounts, err := cgroups.GetCgroupMounts()
+	mounts, err := cgroups.GetCgroupMounts(false)
 	if err != nil {
 		return err
 	}
@@ -275,34 +275,34 @@ func (e *Exporter) collect(ch chan<- prometheus.Metric) error {
 		}
 
 		// Last seen
-		e.lastSeen.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Set(float64(time.Now().Unix()))
+		e.lastSeen.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Add(float64(time.Now().Unix()))
 
 		// CPU stats
 		// - Usage
 		for i, value := range stats.CpuStats.CpuUsage.PercpuUsage {
-			e.cpuUsageSecondsPerCPU.WithLabelValues(append([]string{name, id, image, fmt.Sprintf("cpu%02d", i)}, labelValues...)...).Set(float64(value) / float64(time.Second))
+			e.cpuUsageSecondsPerCPU.WithLabelValues(append([]string{name, id, image, fmt.Sprintf("cpu%02d", i)}, labelValues...)...).Add(float64(value) / float64(time.Second))
 		}
 
-		e.cpuUsageSeconds.WithLabelValues(append([]string{name, id, image, "kernel"}, labelValues...)...).Set(float64(stats.CpuStats.CpuUsage.UsageInKernelmode) / float64(time.Second))
-		e.cpuUsageSeconds.WithLabelValues(append([]string{name, id, image, "user"}, labelValues...)...).Set(float64(stats.CpuStats.CpuUsage.UsageInUsermode) / float64(time.Second))
+		e.cpuUsageSeconds.WithLabelValues(append([]string{name, id, image, "kernel"}, labelValues...)...).Add(float64(stats.CpuStats.CpuUsage.UsageInKernelmode) / float64(time.Second))
+		e.cpuUsageSeconds.WithLabelValues(append([]string{name, id, image, "user"}, labelValues...)...).Add(float64(stats.CpuStats.CpuUsage.UsageInUsermode) / float64(time.Second))
 
 		// - Throttling
-		e.cpuThrottledPeriods.WithLabelValues(append([]string{name, id, image, "total"}, labelValues...)...).Set(float64(stats.CpuStats.ThrottlingData.Periods))
-		e.cpuThrottledPeriods.WithLabelValues(append([]string{name, id, image, "throttled"}, labelValues...)...).Set(float64(stats.CpuStats.ThrottlingData.ThrottledPeriods))
-		e.cpuThrottledTime.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Set(float64(stats.CpuStats.ThrottlingData.ThrottledTime) / float64(time.Second))
+		e.cpuThrottledPeriods.WithLabelValues(append([]string{name, id, image, "total"}, labelValues...)...).Add(float64(stats.CpuStats.ThrottlingData.Periods))
+		e.cpuThrottledPeriods.WithLabelValues(append([]string{name, id, image, "throttled"}, labelValues...)...).Add(float64(stats.CpuStats.ThrottlingData.ThrottledPeriods))
+		e.cpuThrottledTime.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Add(float64(stats.CpuStats.ThrottlingData.ThrottledTime) / float64(time.Second))
 
 		// Memory stats
-		e.memoryUsageBytes.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Set(float64(stats.MemoryStats.Usage.Usage))
-		e.memoryMaxUsageBytes.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Set(float64(stats.MemoryStats.Usage.MaxUsage))
+		e.memoryUsageBytes.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Add(float64(stats.MemoryStats.Usage.Usage))
+		e.memoryMaxUsageBytes.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Add(float64(stats.MemoryStats.Usage.MaxUsage))
 
 		for t, value := range stats.MemoryStats.Stats {
 			if isMemoryPagingCounter(t) {
-				e.memoryPaging.WithLabelValues(append([]string{name, id, image, t}, labelValues...)...).Set(float64(value))
+				e.memoryPaging.WithLabelValues(append([]string{name, id, image, t}, labelValues...)...).Add(float64(value))
 			} else {
-				e.memoryStats.WithLabelValues(append([]string{name, id, image, t}, labelValues...)...).Set(float64(value))
+				e.memoryStats.WithLabelValues(append([]string{name, id, image, t}, labelValues...)...).Add(float64(value))
 			}
 		}
-		e.memoryFailures.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Set(float64(stats.MemoryStats.Usage.Failcnt))
+		e.memoryFailures.WithLabelValues(append([]string{name, id, image}, labelValues...)...).Add(float64(stats.MemoryStats.Usage.Failcnt))
 
 		// BlkioStats
 		devMap, err := newDeviceMap(procDiskStats)
@@ -310,16 +310,16 @@ func (e *Exporter) collect(ch chan<- prometheus.Metric) error {
 			return err
 		}
 		for _, stat := range stats.BlkioStats.IoServiceBytesRecursive {
-			e.blkioIoServiceBytesRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Set(float64(stat.Value))
+			e.blkioIoServiceBytesRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Add(float64(stat.Value))
 		}
 		for _, stat := range stats.BlkioStats.IoServicedRecursive {
-			e.blkioIoServicedRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Set(float64(stat.Value))
+			e.blkioIoServicedRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Add(float64(stat.Value))
 		}
 		for _, stat := range stats.BlkioStats.IoQueuedRecursive {
-			e.blkioIoQueuedRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Set(float64(stat.Value))
+			e.blkioIoQueuedRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor), stat.Op}, labelValues...)...).Add(float64(stat.Value))
 		}
 		for _, stat := range stats.BlkioStats.SectorsRecursive {
-			e.blkioSectorsRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor)}, labelValues...)...).Set(float64(stat.Value))
+			e.blkioSectorsRecursive.WithLabelValues(append([]string{name, id, image, devMap.name(stat.Major, stat.Minor)}, labelValues...)...).Add(float64(stat.Value))
 		}
 	}
 	return nil
