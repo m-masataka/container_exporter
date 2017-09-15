@@ -1,7 +1,8 @@
 package main
 
-import "github.com/fsouza/go-dockerclient"
-
+import (
+	"github.com/fsouza/go-dockerclient"
+)
 type dockerManager struct {
 	addr   string
 	parent string
@@ -18,6 +19,7 @@ func (m *dockerManager) Containers() ([]*container, error) {
 		return nil, err
 	}
 
+	client.SetTimeout(time.Minute)
 	// Get all *running* containers
 	containers, err := client.ListContainers(docker.ListContainersOptions{All: false})
 	if err != nil {
